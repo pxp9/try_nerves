@@ -18,6 +18,7 @@ mkShell {
     x11_ssh_askpass
     pkg-config
     qemu
+    xdelta
   ];
   shellHook = ''
     SUDO_ASKPASS=${pkgs.x11_ssh_askpass}/libexec/x11-ssh-askpass
