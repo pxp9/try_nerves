@@ -7,7 +7,7 @@ defmodule HelloNerves.Application do
 
   @impl true
   def start(_type, _args) do
-    setup_wifi()
+    setup_wifi_and_token()
 
     children =
       [
@@ -25,6 +25,8 @@ defmodule HelloNerves.Application do
   # List all child processes to be supervised
   defp target_children(_target) do
     [
+      ExGram,
+      {HelloNerves.Bot, [method: :polling, token: Application.get_env(:ex_gram, :token)]},
       InterfaceWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:hello_nerves, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Interface.PubSub},
@@ -33,10 +35,16 @@ defmodule HelloNerves.Application do
   end
 
   if Mix.target() == :host do
-    defp setup_wifi(), do: :ok
+    defp setup_wifi_and_token(), do: :ok
   else
-    defp setup_wifi() do
+    defp setup_wifi_and_token() do
       kv = Nerves.Runtime.KV.get_all()
+
+      token = kv["bot_token"]
+
+      if not empty?(token) do
+        Application.put_env(:ex_gram, :token, token)
+      end
 
       if true?(kv["wifi_force"]) or not wlan0_configured?() do
         ssid = kv["wifi_ssid"]
@@ -54,7 +62,7 @@ defmodule HelloNerves.Application do
     catch
       _, _ -> false
     end
-    
+
     defp true?(""), do: false
     defp true?(nil), do: false
     defp true?("false"), do: false

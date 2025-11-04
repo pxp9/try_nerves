@@ -9,7 +9,7 @@ defmodule HelloNerves.MixProject do
     # :rpi2,
     # :rpi3,
     # :rpi3a,
-    :rpi4,
+    :rpi3,
     # :rpi5,
     # :bbb,
     # :osd32mp1,
@@ -18,6 +18,10 @@ defmodule HelloNerves.MixProject do
     :qemu_aarch64,
     :x86_64
   ]
+
+  @ble_targets [:rpi0, :rpi0_2, :rpi3, :rpi3a]
+
+  System.put_env("ERL_COMPILER_OPTIONS", "deterministic")
 
   def project do
     [
@@ -56,7 +60,7 @@ defmodule HelloNerves.MixProject do
 
       # Dependencies for all targets except :host
       {:nerves_pack, "~> 0.7.1", targets: @all_targets},
-
+      {:nerves_time_zones, "~> 0.3.2"},
       # Dependencies for specific targets
       # NOTE: It's generally low risk and recommended to follow minor version
       # bumps to Nerves systems. Since these include Linux kernel and Erlang
@@ -65,18 +69,26 @@ defmodule HelloNerves.MixProject do
       # {:nerves_system_rpi, "~> 1.24", runtime: false, targets: :rpi},
       # {:nerves_system_rpi0, "~> 1.24", runtime: false, targets: :rpi0},
       # {:nerves_system_rpi2, "~> 1.24", runtime: false, targets: :rpi2},
-      # {:nerves_system_rpi3, "~> 1.24", runtime: false, targets: :rpi3},
+      {:nerves_system_rpi3, "~> 1.24", runtime: false, targets: :rpi3},
       # {:nerves_system_rpi3a, "~> 1.24", runtime: false, targets: :rpi3a},
-      {:nerves_system_rpi4, "~> 1.24", runtime: false, targets: :rpi4},
+      # {:nerves_system_rpi4, "~> 1.24", runtime: false, targets: :rpi4},
       # {:nerves_system_rpi5, "~> 0.2", runtime: false, targets: :rpi5},
       # {:nerves_system_bbb, "~> 2.19", runtime: false, targets: :bbb},
       # {:nerves_system_osd32mp1, "~> 0.15", runtime: false, targets: :osd32mp1},
       {:nerves_system_x86_64, "~> 1.24", runtime: false, targets: :x86_64},
-      {:nerves_system_qemu_aarch64, "~> 0.1.1",  runtime: false, targets: :qemu_aarch64},
+      {:nerves_system_qemu_aarch64, "~> 0.1.1", runtime: false, targets: :qemu_aarch64},
 
       # {:nerves_system_grisp2, "~> 0.8", runtime: false, targets: :grisp2},
       # {:nerves_system_mangopi_mq_pro, "~> 0.6", runtime: false, targets: :mangopi_mq_pro}
 
+      ## Common Sensors and peripherials
+      {:blue_heron, "~> 0.5", targets: @ble_targets},
+      {:bmp280, "~> 0.2", targets: @all_targets},
+      {:circuits_gpio, "~> 2.0 or ~> 1.0"},
+      {:circuits_i2c, "~> 2.0 or ~> 1.0"},
+      {:circuits_spi, "~> 2.0 or ~> 1.0"},
+      {:circuits_uart, "~> 1.3"},
+      {:delux, "~> 0.2"},
       ## Phoenix deps
       {:phoenix, "~> 1.8.1"},
       {:telemetry_metrics, "~> 1.0"},
@@ -85,7 +97,8 @@ defmodule HelloNerves.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:ex_gram, "~> 0.56"},
-      {:tesla, "~> 1.2"}
+      {:tesla, "~> 1.2"},
+      {:req, "~> 0.5.0"}
     ]
   end
 
