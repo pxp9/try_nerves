@@ -96,7 +96,8 @@ defmodule HelloNerves.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
-      {:ex_gram, "~> 0.56"},
+      {:ex_gram, git: "https://github.com/rockneurotiko/ex_gram.git", branch: "master"},
+      # {:ex_gram, "~> 0.56"},
       {:tesla, "~> 1.2"},
       {:req, "~> 0.5.0"}
     ]

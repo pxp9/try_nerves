@@ -30,7 +30,8 @@ defmodule HelloNerves.Application do
       InterfaceWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:hello_nerves, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Interface.PubSub},
-      InterfaceWeb.Endpoint
+      InterfaceWeb.Endpoint,
+      {Circuits.UART, name: HelloNerves.Uart}
     ]
   end
 

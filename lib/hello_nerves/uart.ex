@@ -2,48 +2,47 @@ defmodule HelloNerves.Uart do
   @moduledoc """
   Module to start and manage Circuits.UART connection to ttyACM0 at 9600 baud.
   """
-  use GenServer
   require Logger
 
-  @device "ttyACM0"
+  @device_regex ~r"^ttyACM\d$"
   @speed 9600
 
-  def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-  end
+  def open() do
+    device =
+      File.ls!("/dev")
+      |> Enum.find(&String.match?(&1, @device_regex))
 
-  @impl true
-  def init(_opts) do
-    {:ok, uart_pid} = Circuits.UART.start_link()
-
-    case Circuits.UART.open(uart_pid, @device, speed: @speed, active: false) do
-      :ok ->
-        Logger.info("Opened #{@device} at #{@speed} baud")
-        {:ok, uart_pid}
-
-      {:error, reason} ->
-        Logger.error("Failed to open #{@device}: #{inspect(reason)}")
-        {:stop, reason}
+    if device do
+      Circuits.UART.open(__MODULE__, "/dev/#{device}", speed: @speed, active: false)
+    else
+      {:error, :enoent}
     end
   end
 
   def write(data) do
-    GenServer.call(__MODULE__, {:write, data})
+    ensure_open(fn -> Circuits.UART.write(__MODULE__, data) end)
   end
 
-  def read(timeout \\ 5000) do
-    GenServer.call(__MODULE__, {:read, timeout})
+  defp ensure_open(operation) do
+    case operation.() do
+      {:error, :ebadf} ->
+        Logger.info("Reopening")
+
+        case open() do
+          :ok ->
+            Process.sleep(300)
+            operation.()
+
+          error ->
+            error
+        end
+
+      result ->
+        result
+    end
   end
 
-  @impl true
-  def handle_call({:write, data}, _from, uart_pid) do
-    result = Circuits.UART.write(uart_pid, data)
-    {:reply, result, uart_pid}
-  end
-
-  @impl true
-  def handle_call({:read, timeout}, _from, uart_pid) do
-    result = Circuits.UART.read(uart_pid, timeout)
-    {:reply, result, uart_pid}
+  def read(timeout) do
+    ensure_open(fn -> Circuits.UART.read(__MODULE__, timeout) end)
   end
 end
