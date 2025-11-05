@@ -31,7 +31,8 @@ defmodule HelloNerves.Application do
       {DNSCluster, query: Application.get_env(:hello_nerves, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Interface.PubSub},
       InterfaceWeb.Endpoint,
-      {Circuits.UART, name: HelloNerves.Uart}
+      {Circuits.UART, name: HelloNerves.UartPort},
+      {HelloNerves.Uart, []}
     ]
   end
 
