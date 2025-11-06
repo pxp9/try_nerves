@@ -25,7 +25,8 @@ defmodule HelloNerves.Uart do
   def init(_opts) do
     state = %{
       device: nil,
-      connected: false
+      connected: false,
+      rx_buffer: ""
     }
 
     # Try to connect immediately
@@ -40,17 +41,44 @@ defmodule HelloNerves.Uart do
   end
 
   def handle_call({:write, data}, _from, state) do
-    result = Circuits.UART.write(@uart_name, data)
-    {:reply, result, state}
+    case Circuits.UART.write(@uart_name, data) do
+      :ok ->
+        {:reply, :ok, state}
+
+      {:error, :ebadf} ->
+        Logger.warning("UART: Write failed (bad file descriptor), attempting reconnection")
+        Circuits.UART.close(@uart_name)
+        send(self(), :connect)
+        {:reply, {:error, :not_connected}, %{state | connected: false, device: nil}}
+
+      {:error, _reason} = error ->
+        {:reply, error, state}
+    end
   end
 
   def handle_call({:read, _timeout}, _from, %{connected: false} = state) do
     {:reply, {:error, :not_connected}, state}
   end
 
+  def handle_call({:read, _timeout}, _from, %{rx_buffer: buffer} = state) when buffer != "" do
+    # Return buffered data immediately
+    {:reply, {:ok, buffer}, %{state | rx_buffer: ""}}
+  end
+
   def handle_call({:read, timeout}, _from, state) do
-    result = Circuits.UART.read(@uart_name, timeout)
-    {:reply, result, state}
+    case Circuits.UART.read(@uart_name, timeout) do
+      {:ok, data} ->
+        {:reply, {:ok, data}, state}
+
+      {:error, :ebadf} ->
+        Logger.warning("UART: Read failed (bad file descriptor), attempting reconnection")
+        Circuits.UART.close(@uart_name)
+        send(self(), :connect)
+        {:reply, {:error, :not_connected}, %{state | connected: false, device: nil}}
+
+      {:error, _reason} = error ->
+        {:reply, error, state}
+    end
   end
 
   @impl true
@@ -70,7 +98,7 @@ defmodule HelloNerves.Uart do
     end
   end
 
-  # Handle UART errors (like cable disconnect)
+  # Handle UART errors (like cable disconnect) - only with active: true
   def handle_info({:circuits_uart, device_path, {:error, reason}}, state)
       when is_binary(device_path) do
     Logger.warning("UART error on #{device_path}: #{inspect(reason)}, attempting reconnection")
@@ -81,12 +109,12 @@ defmodule HelloNerves.Uart do
     {:noreply, %{state | device: nil, connected: false}}
   end
 
-  # Handle data received from UART
+  # Handle data received from UART - buffer it for later reading
   def handle_info({:circuits_uart, device_path, data}, state) when is_binary(device_path) do
     Logger.debug("UART received from #{device_path}: #{inspect(data)}")
-    # Forward to interested processes or handle here
-    {:noreply, state}
+    {:noreply, %{state | rx_buffer: state.rx_buffer <> data}}
   end
+
 
   def stop(pid) do
     GenServer.stop(pid)
