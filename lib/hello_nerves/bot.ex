@@ -5,6 +5,8 @@ defmodule HelloNerves.Bot do
     name: @bot,
     setup_commands: true
 
+  require Logger
+
   command("start")
   command("help", description: "Print the bot's help")
   command("ledon", description: "Turn on the LED")
@@ -15,15 +17,18 @@ defmodule HelloNerves.Bot do
 
   def bot(), do: @bot
 
-  def handle({:command, :start, _msg}, context) do
+  def handle({:command, :start, msg}, context) do
+    log_command("start", msg)
     answer(context, "Hi!")
   end
 
-  def handle({:command, :help, _msg}, context) do
+  def handle({:command, :help, msg}, context) do
+    log_command("help", msg)
     answer(context, "Here is your help:")
   end
 
-  def handle({:command, :ledon, _msg}, context) do
+  def handle({:command, :ledon, msg}, context) do
+    log_command("ledon", msg)
     case HelloNerves.Uart.write("1") do
       :ok ->
         answer(context, "LED turned ON")
@@ -36,7 +41,8 @@ defmodule HelloNerves.Bot do
     end
   end
 
-  def handle({:command, :ledoff, _msg}, context) do
+  def handle({:command, :ledoff, msg}, context) do
+    log_command("ledoff", msg)
     case HelloNerves.Uart.write("0") do
       :ok ->
         answer(context, "LED turned OFF")
@@ -49,7 +55,8 @@ defmodule HelloNerves.Bot do
     end
   end
 
-  def handle({:command, :ledstatus, _msg}, context) do
+  def handle({:command, :ledstatus, msg}, context) do
+    log_command("ledstatus", msg)
     case HelloNerves.Uart.write("?") do
       :ok ->
         # Wait a bit for Arduino to respond
@@ -81,5 +88,28 @@ defmodule HelloNerves.Bot do
       {:error, reason} ->
         answer(context, "Error: #{inspect(reason)}")
     end
+  end
+
+  # Helper function to log user commands
+  defp log_command(command, msg) do
+    user = get_user_info(msg)
+    Logger.info("Bot: User #{user} requested /#{command}")
+  end
+
+  defp get_user_info(%{from: %{username: username, first_name: first_name, id: id}})
+       when not is_nil(username) do
+    "@#{username} (#{first_name}, ID: #{id})"
+  end
+
+  defp get_user_info(%{from: %{first_name: first_name, id: id}}) do
+    "#{first_name} (ID: #{id})"
+  end
+
+  defp get_user_info(%{from: %{id: id}}) do
+    "User ID: #{id}"
+  end
+
+  defp get_user_info(_msg) do
+    "Unknown user"
   end
 end
