@@ -5,6 +5,7 @@ defmodule HelloNerves.WiFi do
   @interface "wlan0"
   @reconnect_interval 5_000
   @scan_retry_interval 2_000
+  @initial_delay 10_000
 
   # Client API
   def start_link(opts) do
@@ -30,19 +31,40 @@ defmodule HelloNerves.WiFi do
     }
 
     # Try to connect after a short delay to let VintageNet initialize
-    Process.send_after(self(), :try_connect, 1000)
+    Process.send_after(self(), :try_connect, @initial_delay)
 
     {:ok, state}
   end
 
   @impl true
   def handle_info(:try_connect, state) do
-    if state.force or not wlan0_configured?() do
-      Logger.info("WiFi: Attempting to connect...")
-      attempt_connection(state)
-    else
-      Logger.info("WiFi: Already configured, skipping")
-      {:noreply, %{state | connected: true}}
+    cond do
+      state.force ->
+        Logger.info("WiFi: Force flag set, attempting connection...")
+        attempt_connection(state)
+
+      not wlan0_configured?() ->
+        Logger.info("WiFi: Not configured, attempting connection...")
+        attempt_connection(state)
+
+      true ->
+        # Already configured, check if it's actually working
+        case get_connection_status() do
+          :internet ->
+            Logger.info("WiFi: Already configured and working (internet)")
+            {:noreply, %{state | connected: true, connection_status: :internet}}
+
+          :lan ->
+            Logger.info("WiFi: Already configured and working (LAN)")
+            {:noreply, %{state | connected: true, connection_status: :lan}}
+
+          status ->
+            Logger.warning(
+              "WiFi: Configured but not working (status: #{inspect(status)}), reconnecting..."
+            )
+
+            attempt_connection(state)
+        end
     end
   end
 
@@ -96,37 +118,33 @@ defmodule HelloNerves.WiFi do
     end
   end
 
-  # Catch-all for other VintageNet messages
   def handle_info({VintageNet, _property, _old, _new, _meta}, state) do
     {:noreply, state}
   end
 
-  # Private Functions
+  defp attempt_connection(%{ssid_list: []} = state), do: {:noreply, state}
+  defp attempt_connection(%{connected: true} = state), do: {:noreply, state}
+
   defp attempt_connection(state) do
-    if Enum.empty?(state.ssid_list) do
-      Logger.warning("WiFi: No SSIDs configured")
-      {:noreply, state}
-    else
-      case scan_for_networks() do
-        {:ok, available_aps} ->
-          Logger.info("WiFi: Found #{length(available_aps)} networks")
-          connect_to_available_network(available_aps, state)
+    case scan_for_networks() do
+      {:ok, available_aps} ->
+        Logger.info("WiFi: Found #{length(available_aps)} networks")
+        connect_to_available_network(available_aps, state)
 
-        {:error, reason} ->
-          Logger.warning(
-            "WiFi: Scan failed: #{inspect(reason)}, retrying in #{@scan_retry_interval}ms"
-          )
+      {:error, reason} ->
+        Logger.warning(
+          "WiFi: Scan failed: #{inspect(reason)}, retrying in #{@scan_retry_interval}ms"
+        )
 
-          Process.send_after(self(), :retry_scan, @scan_retry_interval)
-          {:noreply, state}
-      end
+        Process.send_after(self(), :retry_scan, @scan_retry_interval)
+        {:noreply, state}
     end
   end
 
   defp scan_for_networks do
     case VintageNetWiFi.ioctl(@interface, :scan, []) do
       :ok ->
-        Process.sleep(2000)
+        Process.sleep(@scan_retry_interval)
 
         aps =
           VintageNet.get(["interface", @interface, "wifi", "access_points"])
@@ -174,6 +192,12 @@ defmodule HelloNerves.WiFi do
     VintageNet.get_configuration(@interface) |> VintageNetWiFi.network_configured?()
   catch
     _, _ -> false
+  end
+
+  defp get_connection_status do
+    VintageNet.get(["interface", @interface, "connection"])
+  catch
+    _, _ -> :disconnected
   end
 
   defp parse_ssids(nil), do: []
