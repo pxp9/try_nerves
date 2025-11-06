@@ -4,10 +4,11 @@ defmodule HelloNerves.Application do
   @moduledoc false
 
   use Application
+  require Logger
 
   @impl true
   def start(_type, _args) do
-    setup_wifi_and_token()
+    setup_token()
 
     children =
       [
@@ -23,57 +24,47 @@ defmodule HelloNerves.Application do
   end
 
   # List all child processes to be supervised
-  defp target_children(_target) do
+  defp target_children(:host) do
     [
-      ExGram,
-      {HelloNerves.Bot, [method: :polling, token: Application.get_env(:ex_gram, :token)]},
       InterfaceWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:hello_nerves, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Interface.PubSub},
       InterfaceWeb.Endpoint,
-      {Circuits.UART, name: HelloNerves.UartPort},
-      {HelloNerves.Uart, []}
+      ExGram,
+      {HelloNerves.Bot, [method: :polling, token: Application.get_env(:ex_gram, :token)]}
+    ]
+  end
+
+  defp target_children(_target) do
+    [
+      InterfaceWeb.Telemetry,
+      {DNSCluster, query: Application.get_env(:hello_nerves, :dns_cluster_query) || :ignore},
+      {Phoenix.PubSub, name: Interface.PubSub},
+      InterfaceWeb.Endpoint,
+      %{
+        id: HelloNerves.UartPort,
+        start: {Circuits.UART, :start_link, [[name: HelloNerves.UartPort]]},
+        restart: :transient
+      },
+      # {Circuits.UART, name: HelloNerves.UartPort},
+      {HelloNerves.Uart, []},
+      {HelloNerves.WiFi, []},
+      ExGram,
+      {HelloNerves.Bot, [method: :polling, token: Application.get_env(:ex_gram, :token)]}
     ]
   end
 
   if Mix.target() == :host do
-    defp setup_wifi_and_token(), do: :ok
+    defp setup_token(), do: :ok
   else
-    defp setup_wifi_and_token() do
+    defp setup_token() do
       kv = Nerves.Runtime.KV.get_all()
-
       token = kv["bot_token"]
 
-      if not empty?(token) do
+      if token && token != "" do
         Application.put_env(:ex_gram, :token, token)
       end
-
-      if true?(kv["wifi_force"]) or not wlan0_configured?() do
-        ssid = kv["wifi_ssid"]
-        passphrase = kv["wifi_passphrase"]
-
-        if not empty?(ssid) do
-          _ = VintageNetWiFi.quick_configure(ssid, passphrase)
-          :ok
-        end
-      end
     end
-
-    defp wlan0_configured?() do
-      VintageNet.get_configuration("wlan0") |> VintageNetWiFi.network_configured?()
-    catch
-      _, _ -> false
-    end
-
-    defp true?(""), do: false
-    defp true?(nil), do: false
-    defp true?("false"), do: false
-    defp true?("FALSE"), do: false
-    defp true?(_), do: true
-
-    defp empty?(""), do: true
-    defp empty?(nil), do: true
-    defp empty?(_), do: false
   end
 
   # Tell Phoenix to update the endpoint configuration

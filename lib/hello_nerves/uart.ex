@@ -71,7 +71,8 @@ defmodule HelloNerves.Uart do
   end
 
   # Handle UART errors (like cable disconnect)
-  def handle_info({:circuits_uart, device_path, {:error, reason}}, state) when is_binary(device_path) do
+  def handle_info({:circuits_uart, device_path, {:error, reason}}, state)
+      when is_binary(device_path) do
     Logger.warning("UART error on #{device_path}: #{inspect(reason)}, attempting reconnection")
 
     Circuits.UART.close(@uart_name)
@@ -85,6 +86,11 @@ defmodule HelloNerves.Uart do
     Logger.debug("UART received from #{device_path}: #{inspect(data)}")
     # Forward to interested processes or handle here
     {:noreply, state}
+  end
+
+  def stop(pid) do
+    GenServer.stop(pid)
+    GenServer.stop(@uart_name)
   end
 
   # Private Functions
