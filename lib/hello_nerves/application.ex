@@ -8,7 +8,7 @@ defmodule HelloNerves.Application do
 
   @impl true
   def start(_type, _args) do
-    setup_token()
+    setup_bot()
 
     children =
       [
@@ -49,20 +49,27 @@ defmodule HelloNerves.Application do
       # {Circuits.UART, name: HelloNerves.UartPort},
       {HelloNerves.Uart, []},
       {HelloNerves.WiFi, []},
+      # I2C LCD1602 - Change address to 0x3F if 0x27 doesn't work
+      {HelloNerves.LCD1602, [bus: "i2c-1", address: 0x27]},
       ExGram,
       {HelloNerves.Bot, [method: :polling, token: Application.get_env(:ex_gram, :token)]}
     ]
   end
 
   if Mix.target() == :host do
-    defp setup_token(), do: :ok
+    defp setup_bot(), do: :ok
   else
-    defp setup_token() do
+    defp setup_bot() do
       kv = Nerves.Runtime.KV.get_all()
       token = kv["bot_token"]
+      tg_owner_user = kv["tg_owner_user"]
 
       if token && token != "" do
         Application.put_env(:ex_gram, :token, token)
+      end
+
+      if tg_owner_user && tg_owner_user != "" do
+        Application.put_env(:hello_nerves, :tg_owner_user, tg_owner_user)
       end
     end
   end

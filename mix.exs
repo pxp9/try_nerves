@@ -85,7 +85,7 @@ defmodule HelloNerves.MixProject do
       {:blue_heron, "~> 0.5", targets: @ble_targets},
       {:bmp280, "~> 0.2", targets: @all_targets},
       {:circuits_gpio, "~> 2.0 or ~> 1.0"},
-      {:circuits_i2c, "~> 2.0 or ~> 1.0"},
+      {:circuits_i2c, "~> 2.1"},
       {:circuits_spi, "~> 2.0 or ~> 1.0"},
       {:circuits_uart, "~> 1.3"},
       {:delux, "~> 0.2"},

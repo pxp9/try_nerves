@@ -35,3 +35,5 @@ kill_qemu_x86_64:
 kill_qemu_aarch64:
 	kill -9 $$(pidof qemu-system-aarch64)
 	
+avahi-check:
+	avahi-browse -a

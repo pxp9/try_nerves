@@ -82,6 +82,7 @@ defmodule HelloNerves.WiFi do
     case new_value do
       :internet ->
         Logger.info("WiFi: Internet connection established")
+        send(:hello_nerves, :init)
         {:noreply, %{state | connection_status: :internet}}
 
       :lan ->

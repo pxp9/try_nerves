@@ -11,7 +11,6 @@
     { nixpkgs, nixpkgs-unstable, ... }:
     let
 
-
       supportedSystems = [
         "x86_64-linux"
         "aarch64-linux"
@@ -58,6 +57,7 @@
               xdelta
               screen
               claude-code
+              elixir-ls
 
               ## AVR
               pkgsCross.avr.stdenv.cc
