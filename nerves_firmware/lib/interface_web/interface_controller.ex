@@ -7,8 +7,8 @@ defmodule InterfaceWeb.InterfaceController do
 
   if Mix.target() == :host do
     defp os_spec() do
+      os_data = to_string(:erlang.system_info(:system_architecture))
 
-      os_data =  to_string(:erlang.system_info(:system_architecture))
       %{
         os: os_data,
         architecture: os_data
@@ -16,6 +16,7 @@ defmodule InterfaceWeb.InterfaceController do
     end
   else
     alias Nerves.Runtime.KV
+
     defp os_spec() do
       fw_architecture = KV.get_active("nerves_fw_architecture")
       fw_platform = KV.get_active("nerves_fw_platform")

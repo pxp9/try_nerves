@@ -115,7 +115,6 @@ defmodule HelloNerves.Uart do
     {:noreply, %{state | rx_buffer: state.rx_buffer <> data}}
   end
 
-
   def stop(pid) do
     GenServer.stop(pid)
     GenServer.stop(@uart_name)
