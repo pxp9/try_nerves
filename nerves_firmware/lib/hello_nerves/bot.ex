@@ -12,6 +12,7 @@ defmodule HelloNerves.Bot do
   command("ledoff", description: "Turn off the LED")
   command("ledstatus", description: "Check LED status")
   command("light", description: "Read light sensor value")
+  command("reset", description: "Reset LLM conversation context")
 
   middleware(ExGram.Middleware.IgnoreUsername)
 
@@ -93,6 +94,18 @@ defmodule HelloNerves.Bot do
 
       {:error, reason} ->
         answer(context, "Error: #{inspect(reason)}")
+    end
+  end
+
+  def handle({:command, :reset, msg}, context) do
+    log_command("reset", msg)
+
+    case HelloNerves.LLMAgent.reset_history() do
+      :ok ->
+        answer(context, "LLM conversation context has been reset")
+
+      {:error, reason} ->
+        answer(context, "Error resetting context: #{inspect(reason)}")
     end
   end
 

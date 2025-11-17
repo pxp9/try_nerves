@@ -92,6 +92,8 @@ defmodule HelloNerves.LLMAgent do
 
       Always use tools when appropriate and provide clear, helpful responses about what you did.
 
+      Always answer in the same language as the user.
+
       Be concise and friendly in your responses.
       """)
 
