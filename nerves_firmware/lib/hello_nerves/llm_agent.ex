@@ -220,7 +220,7 @@ defmodule HelloNerves.LLMAgent do
             history_with_results =
               Enum.reduce(tool_calls, history_with_tool_call, fn tool_call, ctx ->
                 # Find the tool
-                tool = Enum.find(tools, fn t -> t.name == tool_call.name end)
+                tool = Enum.find(tools_list, fn t -> t.name == tool_call.name end)
 
                 ## it will crash if we have nil but it is fine.
                 %ReqLLM.Tool{} = tool
@@ -248,15 +248,24 @@ defmodule HelloNerves.LLMAgent do
               end)
 
             # Get final response from LLM after tool execution
-            case ReqLLM.stream_text(model, history_with_results.messages) do
+            # Pass tools again in case LLM wants to make additional tool calls
+            case ReqLLM.stream_text(model, history_with_results.messages, tools: tools_list) do
               {:ok, final_stream_response} ->
                 final_chunks = Enum.to_list(final_stream_response.stream)
-                final_text = final_chunks |> Enum.map_join("", & &1.text)
 
-                final_history =
-                  Context.append(history_with_results, Context.assistant(final_text))
+                # Check if there are MORE tool calls
+                case extract_tool_calls_from_chunks(final_chunks) do
+                  [] ->
+                    # No more tool calls, return the final text
+                    final_text = final_chunks |> Enum.map_join("", & &1.text)
+                    final_history =
+                      Context.append(history_with_results, Context.assistant(final_text))
+                    {:ok, final_history, final_text}
 
-                {:ok, final_history, final_text}
+                  _more_tool_calls ->
+                    # Recursively handle more tool calls
+                    stream_and_handle_tools(model, history_with_results, tools)
+                end
 
               {:error, error} ->
                 {:error, error}
