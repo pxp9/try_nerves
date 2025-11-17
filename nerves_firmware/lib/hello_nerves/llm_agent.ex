@@ -13,7 +13,7 @@ defmodule HelloNerves.LLMAgent do
 
   @default_model "google:gemini-flash-lite-latest"
 
-  defstruct tools: [],
+  defstruct tools: %MapSet{},
             model: nil,
             history: nil
 
@@ -98,7 +98,7 @@ defmodule HelloNerves.LLMAgent do
     history = Context.new([Context.system(system_prompt)])
 
     state = %__MODULE__{
-      tools: [],
+      tools: MapSet.new(),
       model: model,
       history: history
     }
@@ -118,10 +118,9 @@ defmodule HelloNerves.LLMAgent do
         callback: callback
       )
 
-    new_tools = [tool | state.tools]
-    Logger.info("Registered tool: #{name}")
-
-    {:reply, :ok, %{state | tools: new_tools}}
+      new_tools = MapSet.put(state.tools, tool)
+      Logger.info("Registered tool: #{name}")
+      {:reply, :ok, %{state | tools: new_tools}}
   end
 
   @impl true
@@ -193,7 +192,10 @@ defmodule HelloNerves.LLMAgent do
   ## Private Functions
 
   defp stream_and_handle_tools(model, history, tools) do
-    case ReqLLM.stream_text(model, history.messages, tools: tools) do
+    # Convert MapSet to list for ReqLLM
+    tools_list = MapSet.to_list(tools)
+
+    case ReqLLM.stream_text(model, history.messages, tools: tools_list) do
       {:ok, stream_response} ->
         # Collect all chunks
         chunks = Enum.to_list(stream_response.stream)
