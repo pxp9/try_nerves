@@ -10,5 +10,5 @@ This is a poncho project of a bunch of hardware.
 
 - [X] Make ATOMVM work in the Raspberry pi pico 2W
 - [ ] Make some sensors work with the Rasberry pi pico 
-- [ ] Built an Agent in the Nerves device which can handle the hardware and make calls into the tools provided, sensors, LCD and so on ... 
+- [X] Built an Agent in the Nerves device which can handle the hardware and make calls into the tools provided, sensors, LCD and so on ... 
 
