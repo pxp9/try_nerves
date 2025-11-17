@@ -40,7 +40,7 @@ defmodule HelloNerves.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :runtime_tools],
+      extra_applications: [:logger, :runtime_tools, :req, :req_llm],
       mod: {HelloNerves.Application, []}
     ]
   end
@@ -82,8 +82,8 @@ defmodule HelloNerves.MixProject do
       # {:nerves_system_mangopi_mq_pro, "~> 0.6", runtime: false, targets: :mangopi_mq_pro}
 
       ## Common Sensors and peripherials
-      {:blue_heron, "~> 0.5", targets: @ble_targets},
-      {:bmp280, "~> 0.2", targets: @all_targets},
+      # {:blue_heron, "~> 0.5", targets: @ble_targets},
+      # {:bmp280, "~> 0.2", targets: @all_targets},
       {:circuits_gpio, "~> 2.0 or ~> 1.0"},
       {:circuits_i2c, "~> 2.1"},
       {:circuits_spi, "~> 2.0 or ~> 1.0"},
@@ -99,7 +99,9 @@ defmodule HelloNerves.MixProject do
       {:ex_gram, git: "https://github.com/rockneurotiko/ex_gram.git", branch: "master"},
       # {:ex_gram, "~> 0.56"},
       {:tesla, "~> 1.2"},
-      {:req, "~> 0.5.0"}
+      {:req, "~> 0.5.0"},
+      {:req_llm, "~> 1.0"},
+      {:tidewave, "~> 0.5", only: :dev, targets: :host}
     ]
   end
 

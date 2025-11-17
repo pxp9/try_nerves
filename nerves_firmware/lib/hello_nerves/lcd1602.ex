@@ -177,6 +177,9 @@ defmodule HelloNerves.LCD1602 do
         health_timer = Process.send_after(self(), :health_check, @health_check_interval)
         state = %{state | health_check_timer: health_timer}
 
+        # Register tools with LLM Agent
+        register_with_agent()
+
         {:ok, state}
 
       {:error, reason} ->
@@ -337,6 +340,46 @@ defmodule HelloNerves.LCD1602 do
   def create_char(location, charmap)
       when is_integer(location) and is_list(charmap) and length(charmap) == 8 do
     GenServer.call(__MODULE__, {:create_char, location, charmap})
+  end
+
+  ## Tool Functions for LLM Agent
+
+  @doc """
+  Display text on LCD (called by LLM Agent).
+  """
+  def tool_display(args) when is_map(args) do
+    text = Map.get(args, :text) || Map.get(args, "text", "")
+    Logger.info("LCD: Displaying via tool '#{text}'")
+
+    case write(text) do
+      :ok -> {:ok, "Text displayed on LCD: #{text}"}
+      {:error, reason} -> {:error, "Failed to display: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
+  Clear LCD display (called by LLM Agent).
+  """
+  def tool_clear(_args) do
+    Logger.info("LCD: Clearing via tool")
+
+    case clear() do
+      :ok -> {:ok, "LCD cleared"}
+      {:error, reason} -> {:error, "Failed to clear: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
+  Set LCD backlight (called by LLM Agent).
+  """
+  def tool_backlight(args) when is_map(args) do
+    on = Map.get(args, "on", true)
+    Logger.info("LCD: Setting backlight via tool to #{on}")
+
+    case backlight(on) do
+      :ok -> {:ok, "Backlight #{if on, do: "on", else: "off"}"}
+      {:error, reason} -> {:error, "Failed to set backlight: #{inspect(reason)}"}
+    end
   end
 
   ## GenServer Callbacks
@@ -612,6 +655,9 @@ defmodule HelloNerves.LCD1602 do
 
     result =
       cond do
+        line_count == 0 ->
+          :ok
+
         line_count == 1 ->
           with :ok <- write_command(state, @lcd_clear_display),
                :ok <- update_display_control(state),
@@ -915,5 +961,42 @@ defmodule HelloNerves.LCD1602 do
   defp utf8_char_to_lcd_code(_char) do
     # Question mark for unknown characters
     [0x3F]
+  end
+
+  # Register this module's tools with the LLM Agent
+  defp register_with_agent do
+    # Register display tool
+    HelloNerves.LLMAgent.register_tool(
+      "lcd_display",
+      "Display text on the 16x2 LCD screen. The LCD can show up to 2 lines of 16 characters each. Longer text will scroll automatically.",
+      [
+        text: [type: :string, required: true, doc: "Text to display on the LCD screen"]
+      ],
+      {__MODULE__, :tool_display}
+    )
+
+    Logger.info("LCD1602: Registered lcd_display tool with LLM Agent")
+
+    # Register clear tool
+    HelloNerves.LLMAgent.register_tool(
+      "lcd_clear",
+      "Clear all text from the LCD screen",
+      [],
+      {__MODULE__, :tool_clear}
+    )
+
+    Logger.info("LCD1602: Registered lcd_clear tool with LLM Agent")
+
+    # Register backlight tool
+    HelloNerves.LLMAgent.register_tool(
+      "lcd_backlight",
+      "Turn the LCD backlight on or off",
+      [
+        on: [type: :boolean, required: true, doc: "true to turn backlight on, false to turn it off"]
+      ],
+      {__MODULE__, :tool_backlight}
+    )
+
+    Logger.info("LCD1602: Registered lcd_backlight tool with LLM Agent")
   end
 end

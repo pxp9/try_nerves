@@ -69,11 +69,12 @@
                 avrdude
 
                 ## AtomVM / Pico
-                pkgsCross.arm-embedded.stdenv.cc
+                gcc-arm-embedded
                 picotool
                 mbedtls_2
                 zlib
                 ninja
+                doxygen
                 python3
                 gperf
               ]
@@ -94,7 +95,6 @@
 
               export LD_LIBRARY_PATH="$PWD/.nix-shell-libs:${
                 pkgs.lib.makeLibraryPath [
-                  pkgs.pkgsCross.arm-embedded.stdenv.cc.libc
                   pkgs.zlib
                   pkgs.mbedtls_2
                 ]

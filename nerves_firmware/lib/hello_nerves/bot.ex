@@ -35,7 +35,7 @@ defmodule HelloNerves.Bot do
   def handle({:command, :ledon, msg}, context) do
     log_command("ledon", msg)
 
-    case HelloNerves.Uart.write("1") do
+    case HelloNerves.Uart.led_on() do
       :ok ->
         answer(context, "LED turned ON")
 
@@ -50,7 +50,7 @@ defmodule HelloNerves.Bot do
   def handle({:command, :ledoff, msg}, context) do
     log_command("ledoff", msg)
 
-    case HelloNerves.Uart.write("0") do
+    case HelloNerves.Uart.led_off() do
       :ok ->
         answer(context, "LED turned OFF")
 
@@ -65,30 +65,12 @@ defmodule HelloNerves.Bot do
   def handle({:command, :ledstatus, msg}, context) do
     log_command("ledstatus", msg)
 
-    case HelloNerves.Uart.write("?") do
-      :ok ->
-        # Wait a bit for Arduino to respond
-        Process.sleep(50)
+    case HelloNerves.Uart.led_status() do
+      {:ok, :on} ->
+        answer(context, "LED is ON")
 
-        case HelloNerves.Uart.read(500) do
-          {:ok, "1"} ->
-            answer(context, "LED is ON")
-
-          {:ok, "0"} ->
-            answer(context, "LED is OFF")
-
-          {:ok, data} ->
-            answer(context, "Unexpected response: #{inspect(data)}")
-
-          {:error, :not_connected} ->
-            answer(context, "Error: UART not connected")
-
-          {:error, :timeout} ->
-            answer(context, "Error: No response from device")
-
-          {:error, reason} ->
-            answer(context, "Error: #{inspect(reason)}")
-        end
+      {:ok, :off} ->
+        answer(context, "LED is OFF")
 
       {:error, :not_connected} ->
         answer(context, "Error: UART not connected")
@@ -101,25 +83,10 @@ defmodule HelloNerves.Bot do
   def handle({:command, :light, msg}, context) do
     log_command("light", msg)
 
-    case HelloNerves.Uart.write("L") do
-      :ok ->
-        # Wait a bit for Arduino to respond
-        Process.sleep(50)
-
-        case HelloNerves.Uart.read(500) do
-          {:ok, value} ->
-            message = interpret_light_value(value)
-            answer(context, message, parse_mode: "MarkdownV2")
-
-          {:error, :not_connected} ->
-            answer(context, "Error: UART not connected")
-
-          {:error, :timeout} ->
-            answer(context, "Error: No response from device")
-
-          {:error, reason} ->
-            answer(context, "Error: #{inspect(reason)}")
-        end
+    case HelloNerves.Uart.read_light_sensor() do
+      {:ok, adc_value} ->
+        message = format_light_value(adc_value)
+        answer(context, message, parse_mode: "MarkdownV2")
 
       {:error, :not_connected} ->
         answer(context, "Error: UART not connected")
@@ -142,17 +109,14 @@ defmodule HelloNerves.Bot do
   end
 
   def handle({:text, text, tg_model}, context) do
-    log_command("Random Text", tg_model)
+    log_command("LLM Prompt", tg_model)
 
-    # Clear the LCD display before writing new message
-    HelloNerves.LCD1602.clear()
+    case HelloNerves.LLMAgent.prompt(text) do
+      {:ok, response} ->
+        answer(context, response)
 
-    case HelloNerves.LCD1602.write(text) do
-      :ok ->
-        answer(context, "Written to LCD!")
-
-      {:error, e} ->
-        answer(context, "Could not write to LCD: #{inspect(e)}")
+      {:error, reason} ->
+        answer(context, "LLM Error: #{inspect(reason)}")
     end
   end
 
@@ -267,28 +231,22 @@ defmodule HelloNerves.Bot do
     inspect(addr)
   end
 
-  # Interpret light sensor value (0-1023 ADC)
-  defp interpret_light_value(value_str) do
-    case Integer.parse(value_str) do
-      {adc_value, _} when adc_value >= 0 and adc_value <= 1023 ->
-        percentage = Float.round(adc_value / 1023 * 100, 1)
-        voltage = Float.round(adc_value / 1023 * 5.0, 2)
-        description = get_light_description(adc_value)
-        icon = get_light_icon(adc_value)
+  # Format light sensor value (0-1023 ADC) for Telegram
+  defp format_light_value(adc_value) when adc_value >= 0 and adc_value <= 1023 do
+    percentage = Float.round(adc_value / 1023 * 100, 1)
+    voltage = Float.round(adc_value / 1023 * 5.0, 2)
+    description = get_light_description(adc_value)
+    icon = get_light_icon(adc_value)
 
-        """
-        #{icon} *Light Sensor Reading*
+    """
+    #{icon} *Light Sensor Reading*
 
-        *Level*: #{escape_markdown(description)}
-        *Raw ADC*: #{adc_value} / 1023
-        *Percentage*: #{escape_markdown("#{percentage}%")}
-        *Voltage*: #{escape_markdown("#{voltage}V")}
-        """
-        |> String.trim()
-
-      _ ->
-        "Invalid sensor reading: #{value_str}"
-    end
+    *Level*: #{escape_markdown(description)}
+    *Raw ADC*: #{adc_value} / 1023
+    *Percentage*: #{escape_markdown("#{percentage}%")}
+    *Voltage*: #{escape_markdown("#{voltage}V")}
+    """
+    |> String.trim()
   end
 
   # Get descriptive text for light level

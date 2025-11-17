@@ -2,6 +2,11 @@
 
 Firmware project for running Elixir on Raspberry Pi Pico 2W using AtomVM.
 
+## Useful links
+
+- [Official AtomVM docs main branch API reference](https://doc.atomvm.org/main/api-reference-documentation.html)
+- [Official Build instructions AtomVM for Pi Pico 2 W](https://doc.atomvm.org/main/build-instructions.html#building-for-raspberry-pi-rp2)
+
 ## AtomVM workflow
 
 ```
@@ -58,8 +63,12 @@ When working with the Pico 2W:
 The AtomVM runtime needs to be compiled and flashed to your Pico 2W first. This only needs to be done once (or when updating AtomVM).
 
 ```bash
+# Clone the AtomVM fork (if not already done)
+# cd /home/pxp9/Programming
+# git clone https://github.com/pxp9/AtomVM
+
 # Navigate to the RP2 platform directory
-cd AtomVM/src/platforms/rp2
+cd ../../AtomVM/src/platforms/rp2
 
 # Create a build directory for RISC-V (Pico 2 uses RISC-V cores)
 mkdir -p build_riscv
@@ -73,6 +82,9 @@ make -j$(nproc)
 
 # The AtomVM.uf2 file will be generated at:
 # src/AtomVM.uf2
+
+# Copy the standard library .avm files to your project
+cp ../../AtomVM/src/platforms/rp2/build_riscv/tests/test_erl_sources/HostAtomVM-prefix/src/HostAtomVM-build/libs/{atomvmlib.avm,estdlib/src/estdlib.avm,eavmlib/src/eavmlib.avm,exavmlib/lib/exavmlib.avm,alisp/src/alisp.avm} avm_deps/
 ```
 
 ### Step 2: Flash AtomVM Runtime to Pico 2W
@@ -88,7 +100,7 @@ You need to flash the AtomVM.uf2 runtime to your Pico 2W. This provides the virt
 # - Release the BOOTSEL button
 
 # Flash using picotool
-picotool load -f AtomVM/src/platforms/rp2/build_riscv/src/AtomVM.uf2
+picotool load -f ../../AtomVM/src/platforms/rp2/build_riscv/src/AtomVM.uf2
 
 # Reboot the device
 picotool reboot
@@ -101,7 +113,7 @@ picotool reboot
 # The device will mount at: /run/media/${USER}/RP2350
 
 # Copy the UF2 file to the mounted device
-cp AtomVM/src/platforms/rp2/build_riscv/src/AtomVM.uf2 /run/media/${USER}/RP2350/
+cp ../../AtomVM/src/platforms/rp2/build_riscv/src/AtomVM.uf2 /run/media/${USER}/RP2350/
 
 # The device will automatically reboot after copying
 ```
@@ -205,7 +217,7 @@ The project is configured for Pico 2W with RISC-V architecture in `mix.exs`:
 **AtomVM.uf2 not found:**
 - Verify you built for the correct architecture (`-DPICO_PLATFORM=rp2350-riscv`)
 - Check that the build completed successfully
-- Look in `AtomVM/src/platforms/rp2/build_riscv/src/AtomVM.uf2`
+- Look in `../../AtomVM/src/platforms/rp2/build_riscv/src/AtomVM.uf2`
 
 **Application not running:**
 - Verify AtomVM.uf2 was flashed first
@@ -258,7 +270,7 @@ If you see an error like "This VM is too large (end 0x... >= LIB_AVM 0x...)", th
 
 ```bash
 # Check the AtomVM main.c for current addresses
-grep -A2 "define LIB_AVM" AtomVM/src/platforms/rp2/src/main.c
+grep -A2 "define LIB_AVM" ../../AtomVM/src/platforms/rp2/src/main.c
 
 # Should show something like:
 # #define LIB_AVM ((void *) 0x10130000)
@@ -298,14 +310,16 @@ sudo dmesg -w
 ### Project Structure
 
 ```
-atom_vm_firmware/
-├── AtomVM/                    # AtomVM runtime source (submodule/clone)
+Programming/
+├── AtomVM/                    # AtomVM runtime source (fork: https://github.com/pxp9/AtomVM)
 │   └── src/platforms/rp2/
 │       └── build_riscv/
 │           └── src/
 │               └── AtomVM.uf2 # Built runtime for Pico 2
-├── lib/                       # Your Elixir application code
-├── mix.exs                    # Project configuration
-├── atom_vm_firmware.avm       # Packaged application
-└── atom_vm_firmware.uf2       # Application in UF2 format
+└── try_nerves/
+    └── atom_vm_firmware/
+        ├── lib/                       # Your Elixir application code
+        ├── mix.exs                    # Project configuration
+        ├── atom_vm_firmware.avm       # Packaged application
+        └── atom_vm_firmware.uf2       # Application in UF2 format
 ```

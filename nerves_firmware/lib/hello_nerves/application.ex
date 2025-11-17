@@ -4,11 +4,11 @@ defmodule HelloNerves.Application do
   @moduledoc false
 
   use Application
-  require Logger
 
   @impl true
   def start(_type, _args) do
     setup_bot()
+    setup_llm_agent()
 
     children =
       [
@@ -30,6 +30,8 @@ defmodule HelloNerves.Application do
       {DNSCluster, query: Application.get_env(:hello_nerves, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Interface.PubSub},
       InterfaceWeb.Endpoint,
+      # LLM Agent for host too (for development/testing)
+      {HelloNerves.LLMAgent, []},
       ExGram,
       {HelloNerves.Bot, [method: :polling, token: Application.get_env(:ex_gram, :token)]}
     ]
@@ -37,19 +39,20 @@ defmodule HelloNerves.Application do
 
   defp target_children(_target) do
     [
+      {HelloNerves.WiFi, []},
       InterfaceWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:hello_nerves, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Interface.PubSub},
       InterfaceWeb.Endpoint,
-      %{
-        id: HelloNerves.UartPort,
-        start: {Circuits.UART, :start_link, [[name: HelloNerves.UartPort]]},
-        restart: :transient
-      },
-      # {Circuits.UART, name: HelloNerves.UartPort},
+      # LLM Agent - must start before hardware tools that register with it
+      {HelloNerves.LLMAgent, []},
+      # %{
+      #   id: HelloNerves.UartPort,
+      #   start: {Circuits.UART, :start_link, [[name: HelloNerves.UartPort]]},
+      #   restart: :transient
+      # },
+      {Circuits.UART, name: HelloNerves.UartPort},
       {HelloNerves.Uart, []},
-      {HelloNerves.WiFi, []},
-      # I2C LCD1602 - Change address to 0x3F if 0x27 doesn't work
       {HelloNerves.LCD1602, [bus: "i2c-1", address: 0x27]},
       ExGram,
       {HelloNerves.Bot, [method: :polling, token: Application.get_env(:ex_gram, :token)]}
@@ -58,6 +61,15 @@ defmodule HelloNerves.Application do
 
   if Mix.target() == :host do
     defp setup_bot(), do: :ok
+
+    defp setup_llm_agent do
+      # On host, try to get from environment variable
+      google_api_key = System.get_env("GOOGLE_API_KEY")
+
+      if google_api_key && google_api_key != "" do
+        Application.put_env(:req_llm, :google_api_key, google_api_key)
+      end
+    end
   else
     defp setup_bot() do
       kv = Nerves.Runtime.KV.get_all()
@@ -70,6 +82,15 @@ defmodule HelloNerves.Application do
 
       if tg_owner_user && tg_owner_user != "" do
         Application.put_env(:hello_nerves, :tg_owner_user, tg_owner_user)
+      end
+    end
+
+    defp setup_llm_agent() do
+      kv = Nerves.Runtime.KV.get_all()
+      google_api_key = kv["google_api_key"]
+
+      if google_api_key && google_api_key != "" do
+        Application.put_env(:req_llm, :google_api_key, google_api_key)
       end
     end
   end

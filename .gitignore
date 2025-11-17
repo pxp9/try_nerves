@@ -25,9 +25,6 @@ erl_crash.dump
 
 .envrc
 
-# AtomVM clone for building RP2350 firmware
-AtomVM/
-
 # Nix shell library symlinks
 .nix-shell-libs/
 .nix-shell-riscv-toolchain/

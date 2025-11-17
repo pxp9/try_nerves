@@ -22,7 +22,7 @@ atom_vm_firmware-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 
-/AtomVM
+AtomVM
 
 /riscv-toolchain-15-x86_64-lin
 
