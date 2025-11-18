@@ -194,147 +194,182 @@ defmodule HelloNerves.LLMAgent do
   ## Private Functions
 
   defp stream_and_handle_tools(model, history, tools) do
-    # Convert MapSet to list for ReqLLM
     tools_list = MapSet.to_list(tools)
 
-    case ReqLLM.stream_text(model, history.messages, tools: tools_list) do
-      {:ok, stream_response} ->
-        # Collect all chunks
-        chunks = Enum.to_list(stream_response.stream)
+    with {:ok, stream_response} <- ReqLLM.stream_text(model, history.messages, tools: tools_list),
+         chunks <- Enum.to_list(stream_response.stream),
+         tool_calls <- extract_tool_calls_from_chunks(chunks) do
+      handle_llm_response(model, history, tools, tools_list, chunks, tool_calls)
+    end
+  end
 
-        case extract_tool_calls_from_chunks(chunks) do
-          [] ->
-            # No tool calls, just return the text
-            text = chunks |> Enum.map_join("", & &1.text)
-            final_history = Context.append(history, Context.assistant(text))
-            {:ok, final_history, text}
+  defp handle_llm_response(_model, history, _tools, _tools_list, chunks, []) do
+    # No tool calls, just return the text
+    text = extract_text_from_chunks(chunks)
+    final_history = Context.append(history, Context.assistant(text))
+    {:ok, final_history, text}
+  end
 
-          tool_calls ->
-            # Tool calls found
-            initial_text = chunks |> Enum.map_join("", & &1.text)
+  defp handle_llm_response(model, history, tools, tools_list, chunks, tool_calls) do
+    Logger.info("Executing #{length(tool_calls)} tool call(s)")
 
-            assistant_message = Context.assistant(initial_text, tool_calls: tool_calls)
-            history_with_tool_call = Context.append(history, assistant_message)
+    history
+    |> add_tool_call_to_history(chunks, tool_calls)
+    |> execute_all_tools(tools_list, tool_calls)
+    |> get_final_llm_response(model, tools, tools_list)
+  end
 
-            Logger.info("Executing #{length(tool_calls)} tool call(s)")
+  defp add_tool_call_to_history(history, chunks, tool_calls) do
+    initial_text = extract_text_from_chunks(chunks)
+    assistant_message = Context.assistant(initial_text, tool_calls: tool_calls)
+    Context.append(history, assistant_message)
+  end
 
-            # Execute tools and collect results
-            history_with_results =
-              Enum.reduce(tool_calls, history_with_tool_call, fn tool_call, ctx ->
-                # Find the tool
-                tool = Enum.find(tools_list, fn t -> t.name == tool_call.name end)
+  defp execute_all_tools(history, tools_list, tool_calls) do
+    Enum.reduce(tool_calls, history, fn tool_call, ctx ->
+      execute_single_tool(ctx, tools_list, tool_call)
+    end)
+  end
 
-                ## it will crash if we have nil but it is fine.
-                %ReqLLM.Tool{} = tool
+  defp execute_single_tool(context, tools_list, tool_call) do
+    tool = Enum.find(tools_list, fn t -> t.name == tool_call.name end)
+    %ReqLLM.Tool{} = tool  # Crash if tool not found
 
-                case Tool.execute(tool, tool_call.arguments) do
-                  {:ok, result} ->
-                    Logger.info(
-                      "Tool #{tool_call.name}(#{inspect(tool_call.arguments)}) → #{inspect(result)}"
-                    )
+    case Tool.execute(tool, tool_call.arguments) do
+      {:ok, result} ->
+        log_tool_result(tool_call, {:ok, result})
+        append_tool_result(context, tool_call, result)
 
-                    tool_result_msg =
-                      Context.tool_result_message(tool_call.name, tool_call.id, result)
+      {:error, error} ->
+        log_tool_result(tool_call, {:error, error})
+        error_result = %{error: "Tool execution failed: #{inspect(error)}"}
+        append_tool_result(context, tool_call, error_result)
+    end
+  end
 
-                    Context.append(ctx, tool_result_msg)
+  defp append_tool_result(context, tool_call, result) do
+    tool_result_msg = Context.tool_result_message(tool_call.name, tool_call.id, result)
+    Context.append(context, tool_result_msg)
+  end
 
-                  {:error, error} ->
-                    Logger.error("Tool #{tool_call.name} failed: #{inspect(error)}")
-                    error_result = %{error: "Tool execution failed: #{inspect(error)}"}
+  defp get_final_llm_response(history_with_results, model, tools, tools_list) do
+    case ReqLLM.stream_text(model, history_with_results.messages, tools: tools_list) do
+      {:ok, final_stream_response} ->
+        final_chunks = Enum.to_list(final_stream_response.stream)
+        final_tool_calls = extract_tool_calls_from_chunks(final_chunks)
 
-                    tool_result_msg =
-                      Context.tool_result_message(tool_call.name, tool_call.id, error_result)
-
-                    Context.append(ctx, tool_result_msg)
-                end
-              end)
-
-            # Get final response from LLM after tool execution
-            # Pass tools again in case LLM wants to make additional tool calls
-            case ReqLLM.stream_text(model, history_with_results.messages, tools: tools_list) do
-              {:ok, final_stream_response} ->
-                final_chunks = Enum.to_list(final_stream_response.stream)
-
-                # Check if there are MORE tool calls
-                case extract_tool_calls_from_chunks(final_chunks) do
-                  [] ->
-                    # No more tool calls, return the final text
-                    final_text = final_chunks |> Enum.map_join("", & &1.text)
-                    final_history =
-                      Context.append(history_with_results, Context.assistant(final_text))
-                    {:ok, final_history, final_text}
-
-                  _more_tool_calls ->
-                    # Recursively handle more tool calls
-                    stream_and_handle_tools(model, history_with_results, tools)
-                end
-
-              {:error, error} ->
-                {:error, error}
-            end
-        end
+        handle_final_response(model, history_with_results, tools, final_chunks, final_tool_calls)
 
       {:error, error} ->
         {:error, error}
     end
   end
 
+  defp handle_final_response(_model, history, _tools, final_chunks, []) do
+    # No more tool calls, return the final text
+    final_text = extract_text_from_chunks(final_chunks)
+    final_history = Context.append(history, Context.assistant(final_text))
+    {:ok, final_history, final_text}
+  end
+
+  defp handle_final_response(model, history, tools, _final_chunks, _more_tool_calls) do
+    # Recursively handle more tool calls
+    stream_and_handle_tools(model, history, tools)
+  end
+
+  defp extract_text_from_chunks(chunks) do
+    Enum.map_join(chunks, "", & &1.text)
+  end
+
+  defp log_tool_result(tool_call, {:ok, result}) do
+    Logger.info("Tool #{tool_call.name}(#{inspect(tool_call.arguments)}) → #{inspect(result)}")
+  end
+
+  defp log_tool_result(tool_call, {:error, error}) do
+    Logger.error("Tool #{tool_call.name} failed: #{inspect(error)}")
+  end
+
   defp extract_tool_calls_from_chunks(chunks) do
-    # Base tool calls with index
-    tool_calls =
-      chunks
-      |> Enum.filter(&(&1.type == :tool_call))
-      |> Enum.map(fn chunk ->
-        Logger.debug("Tool call chunk: #{inspect(chunk)}")
-        %{
-          id: Map.get(chunk.metadata, :id) || "call_#{:erlang.unique_integer()}",
-          name: chunk.name,
-          arguments: chunk.arguments || %{},
-          index: Map.get(chunk.metadata, :index, 0)
-        }
-      end)
+    tool_calls = extract_base_tool_calls(chunks)
+    arg_fragments = collect_argument_fragments(chunks)
 
-    Logger.debug("Extracted base tool calls: #{inspect(tool_calls)}")
+    merge_arguments_into_tool_calls(tool_calls, arg_fragments)
+  end
 
-    # Collect argument fragments from meta chunks
-    meta_chunks = chunks |> Enum.filter(&(&1.type == :meta))
+  defp extract_base_tool_calls(chunks) do
+    chunks
+    |> Enum.filter(&(&1.type == :tool_call))
+    |> Enum.map(&build_tool_call_from_chunk/1)
+    |> tap(&Logger.debug("Extracted base tool calls: #{inspect(&1)}"))
+  end
+
+  defp build_tool_call_from_chunk(chunk) do
+    Logger.debug("Tool call chunk: #{inspect(chunk)}")
+
+    %{
+      id: Map.get(chunk.metadata, :id) || "call_#{:erlang.unique_integer()}",
+      name: chunk.name,
+      arguments: chunk.arguments || %{},
+      index: Map.get(chunk.metadata, :index, 0)
+    }
+  end
+
+  defp collect_argument_fragments(chunks) do
+    chunks
+    |> log_meta_chunks()
+    |> Enum.filter(&is_tool_call_args_chunk?/1)
+    |> Enum.group_by(& &1.metadata.tool_call_args.index)
+    |> Map.new(&assemble_json_fragments/1)
+    |> tap(&Logger.debug("Collected arg_fragments: #{inspect(&1)}"))
+  end
+
+  defp log_meta_chunks(chunks) do
+    meta_chunks = Enum.filter(chunks, &(&1.type == :meta))
     Logger.debug("Meta chunks count: #{length(meta_chunks)}")
     Logger.debug("Meta chunks sample: #{inspect(Enum.take(meta_chunks, 3))}")
-    arg_fragments =
-      chunks
-      |> Enum.filter(fn
-        %{type: :meta, metadata: %{tool_call_args: _}} -> true
-        _ -> false
-      end)
-      |> Enum.group_by(& &1.metadata.tool_call_args.index)
-      |> Map.new(fn {index, fragments} ->
-        json = fragments |> Enum.map_join("", & &1.metadata.tool_call_args.fragment)
-        {index, json}
-      end)
+    chunks
+  end
 
-    Logger.debug("Collected arg_fragments: #{inspect(arg_fragments)}")
+  defp is_tool_call_args_chunk?(%{type: :meta, metadata: %{tool_call_args: _}}), do: true
+  defp is_tool_call_args_chunk?(_), do: false
 
-    # Merge accumulated JSON back into tool calls
-    final_calls = tool_calls
-    |> Enum.map(fn call ->
-      case Map.get(arg_fragments, call.index) do
-        nil ->
-          Logger.debug("No arg fragments for call #{call.name} at index #{call.index}")
-          Map.delete(call, :index)
+  defp assemble_json_fragments({index, fragments}) do
+    json = Enum.map_join(fragments, "", & &1.metadata.tool_call_args.fragment)
+    {index, json}
+  end
 
-        json ->
-          Logger.debug("Decoding JSON for call #{call.name}: #{json}")
-          case Jason.decode(json) do
-            {:ok, args} ->
-              Logger.debug("Decoded args: #{inspect(args)}")
-              call |> Map.put(:arguments, args) |> Map.delete(:index)
-            # keep empty args if invalid JSON
-            {:error, _} -> Map.delete(call, :index)
-          end
-      end
-    end)
+  defp merge_arguments_into_tool_calls(tool_calls, arg_fragments) do
+    tool_calls
+    |> Enum.map(&merge_arguments_for_call(&1, arg_fragments))
+    |> tap(&Logger.debug("Final tool calls with arguments: #{inspect(&1)}"))
+  end
 
-    Logger.debug("Final tool calls with arguments: #{inspect(final_calls)}")
-    final_calls
+  defp merge_arguments_for_call(call, arg_fragments) do
+    case Map.get(arg_fragments, call.index) do
+      nil ->
+        log_no_fragments(call)
+        Map.delete(call, :index)
+
+      json ->
+        decode_and_merge_arguments(call, json)
+    end
+  end
+
+  defp log_no_fragments(call) do
+    Logger.debug("No arg fragments for call #{call.name} at index #{call.index}")
+  end
+
+  defp decode_and_merge_arguments(call, json) do
+    Logger.debug("Decoding JSON for call #{call.name}: #{json}")
+
+    case Jason.decode(json) do
+      {:ok, args} ->
+        Logger.debug("Decoded args: #{inspect(args)}")
+        call |> Map.put(:arguments, args) |> Map.delete(:index)
+
+      {:error, _} ->
+        # Keep empty args if invalid JSON
+        Map.delete(call, :index)
+    end
   end
 end

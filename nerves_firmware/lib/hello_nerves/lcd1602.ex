@@ -373,7 +373,7 @@ defmodule HelloNerves.LCD1602 do
   Set LCD backlight (called by LLM Agent).
   """
   def tool_backlight(args) when is_map(args) do
-    on = Map.get(args, "on", true)
+    on = Map.get(args, :on) || Map.get(args, "on", true)
     Logger.info("LCD: Setting backlight via tool to #{on}")
 
     case backlight(on) do
@@ -970,7 +970,7 @@ defmodule HelloNerves.LCD1602 do
       "lcd_display",
       "Display text on the 16x2 LCD screen. The LCD can show up to 2 lines of 16 characters each. Longer text will scroll automatically.",
       [
-        text: [type: :string, required: true, doc: "Text to display on the LCD screen"]
+        text: [type: :string, required: true, doc: "Text to display on the LCD screen without breaklines"]
       ],
       {__MODULE__, :tool_display}
     )
