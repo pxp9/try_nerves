@@ -50,6 +50,14 @@ defmodule HelloNerves.Uart do
     GenServer.call(__MODULE__, :read_light_sensor)
   end
 
+  @doc """
+  Blink LED with configurable parameters (sends "B<count>,<duration_ms>,<interval_ms>\\n" to Arduino).
+  Returns :ok or {:error, reason}
+  """
+  def blink_led(count, duration_ms, interval_ms) do
+    GenServer.call(__MODULE__, {:blink_led, count, duration_ms, interval_ms})
+  end
+
   ## Tool Functions for LLM Agent
 
   @doc """
@@ -112,6 +120,24 @@ defmodule HelloNerves.Uart do
 
       {:error, reason} ->
         {:error, "Failed to read light sensor: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
+  Blink LED with configurable duration (called by LLM Agent).
+  """
+  def tool_led_blink(args) when is_map(args) do
+    duration_ms = Map.get(args, :duration_ms) || Map.get(args, "duration_ms", 1000)
+    count = Map.get(args, :count) || Map.get(args, "count", 1)
+    interval_ms = Map.get(args, :interval_ms) || Map.get(args, "interval_ms", 500)
+
+    Logger.info(
+      "UART LED Tool: Blinking LED #{count} times, duration=#{duration_ms}ms, interval=#{interval_ms}ms"
+    )
+
+    case blink_led(count, duration_ms, interval_ms) do
+      :ok -> {:ok, "LED blinked #{count} times (#{duration_ms}ms on, #{interval_ms}ms off)"}
+      {:error, reason} -> {:error, "Failed to blink LED: #{inspect(reason)}"}
     end
   end
 
@@ -247,6 +273,21 @@ defmodule HelloNerves.Uart do
   end
 
   @impl true
+  def handle_call({:blink_led, _count, _duration_ms, _interval_ms}, _from, %{connected: false} = state) do
+    {:reply, {:error, :not_connected}, state}
+  end
+
+  def handle_call({:blink_led, count, duration_ms, interval_ms}, _from, state) do
+    # Format: B<count>,<duration_ms>,<interval_ms>\n
+    command = "B#{count},#{duration_ms},#{interval_ms}\n"
+
+    case Circuits.UART.write(@uart_name, command) do
+      :ok -> {:reply, :ok, state}
+      error -> {:reply, error, state}
+    end
+  end
+
+  @impl true
   def handle_info(:connect, state) do
     case find_and_open_device() do
       {:ok, device} ->
@@ -360,6 +401,32 @@ defmodule HelloNerves.Uart do
     )
 
     Logger.info("UART: Registered read_light_sensor tool with LLM Agent")
+
+    # Register LED blink tool
+    HelloNerves.LLMAgent.register_tool(
+      "led_blink",
+      "Blink the LED connected to the Arduino via UART with configurable timing. Allows control of blink count, duration of each blink, and interval between blinks.",
+      [
+        count: [
+          type: :integer,
+          default: 1,
+          doc: "Number of times to blink the LED (default: 1)"
+        ],
+        duration_ms: [
+          type: :integer,
+          default: 1000,
+          doc: "Duration each LED blink should last in milliseconds (default: 1000)"
+        ],
+        interval_ms: [
+          type: :integer,
+          default: 500,
+          doc: "Time interval between blinks in milliseconds (default: 500)"
+        ]
+      ],
+      {__MODULE__, :tool_led_blink}
+    )
+
+    Logger.info("UART: Registered led_blink tool with LLM Agent")
   end
 
   # Get descriptive text for light level

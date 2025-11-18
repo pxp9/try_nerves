@@ -12,7 +12,7 @@ _build/avr/main.hex: _build/avr/main.elf
 	avr-objcopy -O ihex -R .eeprom _build/avr/main.elf _build/avr/main.hex
 
 _build/avr/.flashed: _build/avr/main.hex
-	sudo avrdude -c arduino -p atmega328p -P /dev/ttyACM0 -U flash:w:_build/avr/main.hex:i
+	sudo avrdude -c arduino -p atmega328p -P $(shell \ls /dev/ttyACM*) -U flash:w:_build/avr/main.hex:i
 	touch _build/avr/.flashed
 
 clean:

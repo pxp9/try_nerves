@@ -17,6 +17,11 @@ volatile uint8_t led_state = 0;
 // Global variable to store light sensor value (0-1023)
 volatile uint16_t light_sensor_value = 0;
 
+// Buffer for parsing blink command
+#define RX_BUFFER_SIZE 32
+volatile char rx_buffer[RX_BUFFER_SIZE];
+volatile uint8_t rx_idx = 0;
+
 // Transmit buffer
 #define TX_BUFFER_SIZE 16
 volatile char tx_buffer[TX_BUFFER_SIZE];
@@ -81,6 +86,60 @@ ISR(USART_UDRE_vect) {
   }
 }
 
+// Parse and execute blink command: B<count>,<duration_ms>,<interval_ms>
+// Example: B3,500,300 = blink 3 times, 500ms on, 300ms off
+void execute_blink_command(void) {
+  uint16_t count = 0;
+  uint16_t duration_ms = 0;
+  uint16_t interval_ms = 0;
+  uint8_t i = 1; // Start after 'B'
+
+  // Parse count
+  while (i < rx_idx && rx_buffer[i] >= '0' && rx_buffer[i] <= '9') {
+    count = count * 10 + (rx_buffer[i] - '0');
+    i++;
+  }
+
+  // Skip comma
+  if (i < rx_idx && rx_buffer[i] == ',') i++;
+
+  // Parse duration_ms
+  while (i < rx_idx && rx_buffer[i] >= '0' && rx_buffer[i] <= '9') {
+    duration_ms = duration_ms * 10 + (rx_buffer[i] - '0');
+    i++;
+  }
+
+  // Skip comma
+  if (i < rx_idx && rx_buffer[i] == ',') i++;
+
+  // Parse interval_ms
+  while (i < rx_idx && rx_buffer[i] >= '0' && rx_buffer[i] <= '9') {
+    interval_ms = interval_ms * 10 + (rx_buffer[i] - '0');
+    i++;
+  }
+
+  // Execute blink sequence
+  for (uint16_t j = 0; j < count; j++) {
+    sbi(PORTB, PB5);  // Turn LED ON
+    led_state = 1;
+
+    // Delay for duration_ms
+    for (uint16_t k = 0; k < duration_ms; k++) {
+      _delay_ms(1);
+    }
+
+    cbi(PORTB, PB5);  // Turn LED OFF
+    led_state = 0;
+
+    // Delay for interval_ms (except after last blink)
+    if (j < count - 1) {
+      for (uint16_t k = 0; k < interval_ms; k++) {
+        _delay_ms(1);
+      }
+    }
+  }
+}
+
 // ADC Conversion Complete Interrupt Handler
 ISR(ADC_vect) {
   // Read ADC value and store in global variable
@@ -94,18 +153,52 @@ ISR(ADC_vect) {
 ISR(USART_RX_vect) {
   char received = UDR0;  // Read received byte
 
-  if (received == '1') {
-    sbi(PORTB, PB5);  // Turn LED ON
-    led_state = 1;
-  } else if (received == '0') {
-    cbi(PORTB, PB5);  // Turn LED OFF
-    led_state = 0;
-  } else if (received == '?') {
-    // Query LED state - respond with '1' or '0'
-    usart_transmit(led_state ? '1' : '0');
-  } else if (received == 'L' || received == 'l') {
-    // Query light sensor value - respond with number
-    usart_transmit_number(light_sensor_value);
+  // If we're in the middle of receiving a blink command
+  if (rx_idx > 0) {
+    if (received == '\n' || received == '\r') {
+      // End of command - execute it
+      execute_blink_command();
+      rx_idx = 0;  // Reset buffer
+    } else if (rx_idx < RX_BUFFER_SIZE - 1) {
+      // Add to buffer
+      rx_buffer[rx_idx++] = received;
+    }
+    return;
+  }
+
+  // Handle single character commands
+  switch (received) {
+    case '1':
+      sbi(PORTB, PB5);  // Turn LED ON
+      led_state = 1;
+      break;
+
+    case '0':
+      cbi(PORTB, PB5);  // Turn LED OFF
+      led_state = 0;
+      break;
+
+    case '?':
+      // Query LED state - respond with '1' or '0'
+      usart_transmit(led_state ? '1' : '0');
+      break;
+
+    case 'L':
+    case 'l':
+      // Query light sensor value - respond with number
+      usart_transmit_number(light_sensor_value);
+      break;
+
+    case 'B':
+    case 'b':
+      // Start of blink command - reset buffer
+      rx_idx = 0;
+      rx_buffer[rx_idx++] = received;
+      break;
+
+    default:
+      // Ignore unknown commands
+      break;
   }
 }
 
