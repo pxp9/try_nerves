@@ -190,9 +190,9 @@ mix atomvm.pico.flash
 
 # 3. Monitor serial output (if your code uses IO)
 # The serial device is at /dev/ttyACM*
-screen /dev/ttyACM0 115200
+screen $(\ls /dev/ttyACM*) 115200
 # or
-picocom /dev/ttyACM0 -b 115200
+picocom $(\ls /dev/ttyACM*) -b 115200
 
 # 4. Debug, fix, repeat!
 ```
@@ -222,7 +222,7 @@ The project is configured for Pico 2W with RISC-V architecture in `mix.exs`:
 **Application not running:**
 - Verify AtomVM.uf2 was flashed first
 - Check that your application's start module is configured in `mix.exs`
-- Connect to serial console at `/dev/ttyACM0` to see error messages
+- Connect to serial console at `/dev/ttyACM*` to see error messages
 
 **Serial console issues:**
 - Check that the device appears at `/dev/ttyACM*` (use `ls /dev/ttyACM*`)
@@ -248,20 +248,20 @@ sudo dmesg | tail -40
 # List serial devices
 ls /dev/ttyACM*
 
-# Should show /dev/ttyACM0 when AtomVM is running
+# Should show /dev/ttyACM* when AtomVM is running
 ```
 
 #### Capture serial output from AtomVM
 
 ```bash
 # Reboot device and capture output
-sudo picotool reboot 2>&1 && sleep 2 && timeout 10 cat /dev/ttyACM0 2>&1
+sudo picotool reboot 2>&1 && sleep 2 && timeout 10 cat $(\ls /dev/ttyACM*) 2>&1
 
 # Or use screen to monitor continuously
-screen /dev/ttyACM0 115200
+screen $(\ls /dev/ttyACM*) 115200
 
 # Or use picocom
-picocom /dev/ttyACM0 -b 115200
+picocom $(\ls /dev/ttyACM*) -b 115200
 ```
 
 #### Check memory addresses

@@ -13,6 +13,7 @@ defmodule AtomVmFirmware.MixProject do
         start: AtomVmFirmware,
         pico_path: "/run/media/pxp9/RP2350",
         pico_reset: "/dev/ttyACM*",
+        # family_id: :rp2350_arm_s,
         family_id: :rp2350_riscv,
         app_start: "0x101B0000"
       ]

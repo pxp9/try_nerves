@@ -54,6 +54,8 @@ defmodule HelloNerves.Application do
       {Circuits.UART, name: HelloNerves.UartPort},
       {HelloNerves.Uart, []},
       {HelloNerves.LCD1602, [bus: "i2c-1", address: 0x27]},
+      # TCP server to receive messages from Pico 2W
+      {HelloNerves.PicoServer, []},
       ExGram,
       {HelloNerves.Bot, [method: :polling, token: Application.get_env(:ex_gram, :token)]}
     ]

@@ -63,6 +63,7 @@
                 screen
                 claude-code
                 elixir-ls
+                inetutils
 
                 ## AVR
                 pkgsCross.avr.stdenv.cc
