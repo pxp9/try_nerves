@@ -136,6 +136,7 @@ defmodule AtomVmFirmware do
     case :socket.send(conn, data) do
       :ok ->
         IO.puts("All data sent")
+        :socket.close(conn)
 
       {:ok, rest} ->
         IO.puts("Sent Chunk #{n_chunk}")
@@ -143,6 +144,7 @@ defmodule AtomVmFirmware do
 
       {:error, reason} ->
         IO.puts("Cannot sent data #{inspect(reason)}")
+        :socket.close(conn)
     end
   end
 
@@ -168,18 +170,7 @@ defmodule AtomVmFirmware do
           :ok ->
             data = "#{message}\n"
 
-            case :socket.send(socket, data) do
-              :ok ->
-                IO.puts("Message sent to Nerves successfully")
-                :socket.shutdown(socket, :write)
-                :socket.close(socket)
-                :ok
-
-              {:error, reason} ->
-                IO.puts("Failed to send message: #{inspect(reason)}")
-                :socket.close(socket)
-                {:error, reason}
-            end
+            send_data(socket, data, 0)
 
           {:error, reason} ->
             IO.puts("Failed to connect to Nerves: #{inspect(reason)}")
