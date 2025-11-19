@@ -1,24 +1,25 @@
 defmodule AtomVmFirmware do
   @moduledoc """
-  TCP Echo Server for AtomVM on Raspberry Pi Pico W.
+  UDP Echo Server for AtomVM on Raspberry Pi Pico W.
 
-  This module implements a simple TCP echo server that:
+  This module implements a simple UDP echo server that:
   - Connects to WiFi using configured credentials
-  - Starts a TCP server on port 8080
-  - Echoes back any data received from clients
+  - Opens a UDP socket on port 8080
+  - Sends hello message to Nerves device
+  - Echoes back any data received from Nerves
   """
 
   @compile {:no_warn_undefined, [:string, :network, :socket]}
   @port 8080
-  # Nerves device TCP server configuration
+  # Nerves device UDP server configuration
   @nerves_ip {0, 0, 0, 0}
   @nerves_port 8080
 
   @doc """
-  Start the WiFi station and TCP echo server.
+  Start the WiFi station and UDP echo server.
 
   Configure your WiFi credentials by editing the `ssid` and `psk` values.
-  Once connected and IP is acquired, starts a TCP server on port 8080.
+  Once connected and IP is acquired, starts a UDP server on port 8080.
   """
 
   def setup() do
@@ -75,76 +76,42 @@ defmodule AtomVmFirmware do
   end
 
   def setup_socket(local_ip) do
-    {:ok, socket} = :socket.open(:inet, :stream, :tcp)
-    IO.puts("Socket open")
+    {:ok, socket} = :socket.open(:inet, :dgram, :udp)
+    IO.puts("UDP Socket open")
 
     :ok = :socket.setopt(socket, {:socket, :reuseaddr}, true)
-    :ok = :socket.setopt(socket, {:socket, :linger}, %{onoff: true, linger: 0})
 
-    # Bind to specific local IP address (not :any)
+    # Bind to specific local IP address and port
     :ok = :socket.bind(socket, %{family: :inet, addr: local_ip, port: @port})
-    :ok = :socket.listen(socket)
-    IO.puts("Listening on #{inspect(:socket.sockname(socket))}")
-    spawn(fn -> accept(socket) end)
+    IO.puts("UDP Listening on #{inspect(:socket.sockname(socket))}")
+
+    # Start receiving loop
+    spawn(fn -> udp_receive_loop(socket) end)
   end
 
-  defp accept(socket) do
-    IO.puts("Waiting conn ...")
+  defp udp_receive_loop(socket) do
+    IO.puts("Waiting for UDP message...")
 
-    case :socket.accept(socket) do
-      {:ok, conn} ->
-        case :socket.peername(conn) do
-          {:ok, %{addr: peer_ip}} ->
-            IO.puts("Conn local #{inspect(:socket.sockname(conn))} Peer: #{inspect(peer_ip)}")
+    case :socket.recvfrom(socket) do
+      {:ok, {source, data}} ->
+        source_ip = Map.get(source, :addr)
+        source_port = Map.get(source, :port)
+        IO.puts("Received UDP from #{inspect(source_ip)}:#{source_port}: #{inspect(data)}")
 
-            # Only accept connections from the Nerves device
-            if peer_ip == @nerves_ip do
-              IO.puts("Accepted connection from authorized Nerves device")
-              spawn(fn -> handle_accept(conn) end)
-            else
-              IO.puts("Rejected connection from unauthorized IP: #{inspect(peer_ip)}")
-              :socket.close(conn)
-            end
-
-            accept(socket)
-
-          {:error, reason} ->
-            IO.puts("Cannot get peer info: #{inspect(reason)}")
-            :socket.close(conn)
-            accept(socket)
+        # Only respond to Nerves device
+        if source_ip == @nerves_ip do
+          IO.puts("Echoing back to Nerves")
+          :socket.sendto(socket, data, source)
+          IO.puts("Echo sent")
+        else
+          IO.puts("Ignoring message from unauthorized IP: #{inspect(source_ip)}")
         end
 
-      {:error, reason} ->
-        IO.puts("Cannot accept connection #{inspect(reason)}")
-    end
-  end
-
-  defp handle_accept(conn) do
-    case :socket.recv(conn) do
-      {:ok, data} ->
-        IO.puts("Received #{inspect(data)}")
-        send_data(conn, data, 0)
+        udp_receive_loop(socket)
 
       {:error, reason} ->
-        IO.puts(
-          "Cannot receive the data from #{inspect(:socket.peername(conn))} because #{inspect(reason)}"
-        )
-    end
-  end
-
-  defp send_data(conn, data, n_chunk) do
-    case :socket.send(conn, data) do
-      :ok ->
-        IO.puts("All data sent")
-        :socket.close(conn)
-
-      {:ok, rest} ->
-        IO.puts("Sent Chunk #{n_chunk}")
-        send_data(conn, rest, n_chunk + 1)
-
-      {:error, reason} ->
-        IO.puts("Cannot sent data #{inspect(reason)}")
-        :socket.close(conn)
+        IO.puts("UDP receive error: #{inspect(reason)}")
+        udp_receive_loop(socket)
     end
   end
 
@@ -159,27 +126,30 @@ defmodule AtomVmFirmware do
   end
 
   @doc """
-  Send a message to the Nerves device via TCP.
+  Send a message to the Nerves device via UDP.
   """
   def send_to_nerves(message) do
-    IO.puts("Sending to Nerves: #{message}")
+    IO.puts("Sending UDP to Nerves: #{message}")
 
-    case :socket.open(:inet, :stream, :tcp) do
+    case :socket.open(:inet, :dgram, :udp) do
       {:ok, socket} ->
-        case :socket.connect(socket, %{family: :inet, addr: @nerves_ip, port: @nerves_port}) do
-          :ok ->
-            data = "#{message}\n"
+        dest = %{family: :inet, addr: @nerves_ip, port: @nerves_port}
+        data = "#{message}\n"
 
-            send_data(socket, data, 0)
+        case :socket.sendto(socket, data, dest) do
+          :ok ->
+            IO.puts("UDP message sent to Nerves successfully")
+            :socket.close(socket)
+            :ok
 
           {:error, reason} ->
-            IO.puts("Failed to connect to Nerves: #{inspect(reason)}")
+            IO.puts("Failed to send UDP message: #{inspect(reason)}")
             :socket.close(socket)
             {:error, reason}
         end
 
       {:error, reason} ->
-        IO.puts("Failed to open socket: #{inspect(reason)}")
+        IO.puts("Failed to open UDP socket: #{inspect(reason)}")
         {:error, reason}
     end
   end
