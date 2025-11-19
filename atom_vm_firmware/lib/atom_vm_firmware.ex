@@ -100,13 +100,13 @@ defmodule AtomVmFirmware do
             # Only accept connections from the Nerves device
             if peer_ip == @nerves_ip do
               IO.puts("Accepted connection from authorized Nerves device")
-              spawn(fn -> accept(socket) end)
-              handle_accept(conn)
+              spawn(fn -> handle_accept(conn) end)
             else
               IO.puts("Rejected connection from unauthorized IP: #{inspect(peer_ip)}")
               :socket.close(conn)
-              accept(socket)
             end
+
+            accept(socket)
 
           {:error, reason} ->
             IO.puts("Cannot get peer info: #{inspect(reason)}")
@@ -166,12 +166,12 @@ defmodule AtomVmFirmware do
       {:ok, socket} ->
         case :socket.connect(socket, %{family: :inet, addr: @nerves_ip, port: @nerves_port}) do
           :ok ->
-            # Always append newline (simpler than checking)
             data = "#{message}\n"
 
             case :socket.send(socket, data) do
               :ok ->
                 IO.puts("Message sent to Nerves successfully")
+                :socket.shutdown(socket, :write)
                 :socket.close(socket)
                 :ok
 
