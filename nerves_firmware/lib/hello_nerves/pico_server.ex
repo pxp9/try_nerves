@@ -27,10 +27,33 @@ defmodule HelloNerves.PicoServer do
 
   @doc """
   Send a message to the Pico 2W via UDP.
-  Returns :ok or {:error, reason}
+  Blocks waiting for response with 5 second timeout.
+  Returns {:ok, response} or {:error, reason}
   """
-  def send_to_pico(message) do
+  def send_to_pico(message, timeout \\ 5000) do
     GenServer.call(__MODULE__, {:send_to_pico, message})
+
+    receive do
+      {:pico_response, response} -> {:ok, response}
+    after
+      timeout -> {:error, :timeout}
+    end
+  end
+
+  @doc """
+  Set the RGB LED color on the Pico 2W.
+  Colors: "red", "green", "blue", "yellow", "cyan", "magenta", "white", "off"
+  Blocks waiting for response with 5 second timeout.
+  Returns {:ok, response} or {:error, reason}
+  """
+  def set_color(color, timeout \\ 5000) when is_binary(color) do
+    GenServer.call(__MODULE__, {:send_to_pico, "C:#{color}"})
+
+    receive do
+      {:pico_response, response} -> {:ok, response}
+    after
+      timeout -> {:error, :timeout}
+    end
   end
 
   @doc """
@@ -82,6 +105,12 @@ defmodule HelloNerves.PicoServer do
         new_state = %{state | pico_ip: pico_ip, pico_port: pico_port}
         {:noreply, new_state}
 
+      {:response_with_pid, pid, response} ->
+        Logger.info("Pico response for #{inspect(pid)}: #{response}")
+        # Send message to the reconstructed PID
+        send(pid, {:pico_response, response})
+        {:noreply, state}
+
       {:message, content} ->
         Logger.info("Pico message: #{content}")
         {:noreply, state}
@@ -93,11 +122,14 @@ defmodule HelloNerves.PicoServer do
   end
 
   @impl true
-  def handle_call({:send_to_pico, message}, _from, state) do
+  def handle_call({:send_to_pico, message}, {from_pid, _ref}, state) do
     if state.pico_ip && state.pico_port && state.udp_socket do
-      Logger.info("Sending UDP to Pico #{inspect(state.pico_ip)}:#{state.pico_port}: #{message}")
+      # Format message with PID: #PID<0.234.0>|message
+      pid_str = inspect(from_pid)
+      full_message = "#{pid_str}|#{message}"
+      Logger.info("Sending UDP to Pico #{inspect(state.pico_ip)}:#{state.pico_port}: #{full_message}")
 
-      case :gen_udp.send(state.udp_socket, state.pico_ip, state.pico_port, message) do
+      case :gen_udp.send(state.udp_socket, state.pico_ip, state.pico_port, full_message) do
         :ok ->
           Logger.info("UDP message sent to Pico")
           {:reply, :ok, state}
@@ -147,9 +179,48 @@ defmodule HelloNerves.PicoServer do
     end
   end
 
+  # Parse response with PID: "#PID<0.234.0>|response"
+  defp parse_message("#PID" <> rest) do
+    case parse_pid_and_message(rest, [], :pid) do
+      {pid_str, response} ->
+        case parse_and_reconstruct_pid(pid_str) do
+          {:ok, pid} -> {:response_with_pid, pid, response}
+          :error -> {:message, "#PID" <> rest}
+        end
+
+      :error ->
+        {:message, "#PID" <> rest}
+    end
+  end
+
   defp parse_message(content) do
     # Any other message is treated as a regular message
     {:message, content}
+  end
+
+  # Recursive parser for "#PID<0.234.0>|message"
+  # Base case: empty string, parsing failed
+  defp parse_pid_and_message(<<>>, _acc, _state), do: :error
+
+  # Match the end of PID: ">|"
+  defp parse_pid_and_message(<<?|, rest::binary>>, acc, :pid) do
+    pid_str = acc |> Enum.reverse() |> List.to_string()
+    {pid_str, rest}
+  end
+
+  # Consume one character at a time
+  defp parse_pid_and_message(<<char, rest::binary>>, acc, :pid) do
+    parse_pid_and_message(rest, [char | acc], :pid)
+  end
+
+  # Parse PID string "0.234.0" and reconstruct actual PID using :erlang.list_to_pid/1
+  defp parse_and_reconstruct_pid(pid_str) do
+    # Convert to charlist format for :erlang.list_to_pid: '<0.234.0>'
+    charlist = String.to_charlist(pid_str)
+    pid = :erlang.list_to_pid(charlist)
+    {:ok, pid}
+  rescue
+    _ -> :error
   end
 
   defp parse_ip(ip_str) do
