@@ -19,7 +19,7 @@ defmodule HelloNerves.MixProject do
     :x86_64
   ]
 
-  @ble_targets [:rpi0, :rpi0_2, :rpi3, :rpi3a]
+  # @ble_targets [:rpi0, :rpi0_2, :rpi3, :rpi3a]
 
   System.put_env("ERL_COMPILER_OPTIONS", "deterministic")
 
@@ -86,9 +86,9 @@ defmodule HelloNerves.MixProject do
       # {:bmp280, "~> 0.2", targets: @all_targets},
       {:circuits_gpio, "~> 2.0 or ~> 1.0"},
       {:circuits_i2c, "~> 2.1"},
-      {:circuits_spi, "~> 2.0 or ~> 1.0"},
+      # {:circuits_spi, "~> 2.0 or ~> 1.0"},
       {:circuits_uart, "~> 1.3"},
-      {:delux, "~> 0.2"},
+      # {:delux, "~> 0.2"},
       ## Phoenix deps
       {:phoenix, "~> 1.8.1"},
       {:telemetry_metrics, "~> 1.0"},

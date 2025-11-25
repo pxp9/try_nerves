@@ -63,6 +63,20 @@ defmodule HelloNerves.PicoServer do
     GenServer.call(__MODULE__, :get_pico_info)
   end
 
+  @doc """
+  Manually set the Pico IP and port information.
+  Useful when Pico doesn't send HELLO message or for manual configuration.
+
+  ## Examples
+
+      iex> HelloNerves.PicoServer.set_pico_info({10, 128, 88, 69}, 8080)
+      :ok
+
+  """
+  def set_pico_info(ip, port) when is_tuple(ip) and is_integer(port) do
+    GenServer.call(__MODULE__, {:set_pico_info, ip, port})
+  end
+
   # Server Callbacks
 
   @impl true
@@ -73,6 +87,9 @@ defmodule HelloNerves.PicoServer do
 
     # Start the UDP server
     send(self(), :start_server)
+
+    # Register tools with LLM Agent
+    register_with_agent()
 
     Logger.info("PicoServer initializing on UDP port #{port}")
     {:ok, state}
@@ -151,6 +168,13 @@ defmodule HelloNerves.PicoServer do
     }
 
     {:reply, info, state}
+  end
+
+  @impl true
+  def handle_call({:set_pico_info, ip, port}, _from, state) do
+    Logger.info("Manually setting Pico info: #{inspect(ip)}:#{port}")
+    new_state = %{state | pico_ip: ip, pico_port: port}
+    {:reply, :ok, new_state}
   end
 
   @impl true
@@ -236,6 +260,83 @@ defmodule HelloNerves.PicoServer do
 
       _ ->
         :error
+    end
+  end
+
+  # LLM Tool Registration
+
+  defp register_with_agent do
+    Logger.info("Registering Pico RGB LED tools with LLM Agent...")
+
+    # Register RGB LED control tool
+    HelloNerves.LLMAgent.register_tool(
+      "pico_rgb_led",
+      "Control the RGB LED on the Raspberry Pi Pico 2W via WiFi. IMPORTANT: This LED supports ONLY these exact colors: 'red', 'green', 'blue', 'yellow', 'cyan', 'magenta', 'white', and 'off'. If a user requests a different color (like 'purple', 'orange', 'pink'), you MUST map it to the closest available color. For example: purple→magenta, orange→yellow, pink→magenta, light blue→cyan. Always use one of the 8 supported color names exactly as listed.",
+      [
+        color: [
+          type: :string,
+          required: true,
+          doc:
+            "MUST be exactly one of: 'red', 'green', 'blue', 'yellow', 'cyan', 'magenta', 'white', or 'off'. No other values are accepted."
+        ]
+      ],
+      {__MODULE__, :tool_rgb_led}
+    )
+
+    # Register Pico status tool
+    HelloNerves.LLMAgent.register_tool(
+      "pico_status",
+      "Check the connection status of the Raspberry Pi Pico 2W. Returns IP address and port if connected, or indicates if disconnected.",
+      [],
+      {__MODULE__, :tool_pico_status}
+    )
+
+    Logger.info("Pico RGB LED tools registered successfully")
+  end
+
+  # LLM Tool Callbacks
+
+  @doc """
+  Tool callback for controlling the Pico RGB LED.
+  Called by LLM Agent when the AI wants to change LED color.
+  """
+  def tool_rgb_led(%{color: color}) do
+    Logger.info("LLM Tool: Setting Pico RGB LED to #{color}")
+
+    # Check if Pico is connected first
+    case GenServer.call(__MODULE__, {:send_to_pico, "C:#{color}"}) do
+      :ok ->
+        # Wait for response
+        receive do
+          {:pico_response, response} ->
+            {:ok, "Successfully set Pico RGB LED to #{color}. Response: #{response}"}
+        after
+          5000 ->
+            {:error, "Pico did not respond in time. LED state unknown."}
+        end
+
+      {:error, :pico_not_registered} ->
+        {:error, "Pico is not connected. Cannot control LED."}
+
+      {:error, reason} ->
+        {:error, "Failed to send command to Pico: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
+  Tool callback for checking Pico connection status.
+  Called by LLM Agent when the AI wants to know if Pico is connected.
+  """
+  def tool_pico_status(_args) do
+    Logger.info("LLM Tool: Checking Pico status")
+
+    case get_pico_info() do
+      %{pico_ip: nil, pico_port: nil} ->
+        {:ok, "Pico is not currently connected."}
+
+      %{pico_ip: ip, pico_port: port} ->
+        ip_str = :inet.ntoa(ip) |> to_string()
+        {:ok, "Pico is connected at IP #{ip_str}:#{port}"}
     end
   end
 end

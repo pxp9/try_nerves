@@ -14,10 +14,10 @@ defmodule AtomVmFirmware do
   # Nerves device UDP server configuration
   @nerves_ip {0, 0, 0, 0}
   @nerves_port 8080
-  # RGB LED GPIO pins (Pico 2W physical pins 17-20)
-  @pin_red 13
-  @pin_green 14
-  @pin_blue 15
+  # RGB LED GPIO pins (GP22=Red, GP21=Green, GP20=Blue)
+  @pin_red 22
+  @pin_green 21
+  @pin_blue 20
 
   @doc """
   Start the WiFi station and UDP echo server.

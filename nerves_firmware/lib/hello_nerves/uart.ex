@@ -363,12 +363,12 @@ defmodule HelloNerves.Uart do
     # Register LED control tool
     HelloNerves.LLMAgent.register_tool(
       "led_control",
-      "Control the LED connected to the Arduino via UART. You can turn it on or off.",
+      "Control the GREEN LED connected to the Arduino via UART. This is a single-color green LED that can only be turned on or off (no color changes available).",
       [
         state: [
           type: :string,
           required: true,
-          doc: "LED state: 'on' to turn on, 'off' to turn off"
+          doc: "LED state: 'on' to turn on the green LED, 'off' to turn it off"
         ]
       ],
       {__MODULE__, :tool_led_control}
@@ -379,7 +379,7 @@ defmodule HelloNerves.Uart do
     # Register LED status tool
     HelloNerves.LLMAgent.register_tool(
       "led_status",
-      "Check the current status of the LED (whether it's on or off).",
+      "Check the current status of the green LED connected to the Arduino (whether it's on or off).",
       [],
       {__MODULE__, :tool_led_status}
     )
@@ -405,12 +405,12 @@ defmodule HelloNerves.Uart do
     # Register LED blink tool
     HelloNerves.LLMAgent.register_tool(
       "led_blink",
-      "Blink the LED connected to the Arduino via UART with configurable timing. Allows control of blink count, duration of each blink, and interval between blinks.",
+      "Blink the green LED connected to the Arduino via UART with configurable timing. Allows control of blink count, duration of each blink, and interval between blinks.",
       [
         count: [
           type: :integer,
           default: 1,
-          doc: "Number of times to blink the LED (default: 1)"
+          doc: "Number of times to blink the green LED (default: 1)"
         ],
         duration_ms: [
           type: :integer,
