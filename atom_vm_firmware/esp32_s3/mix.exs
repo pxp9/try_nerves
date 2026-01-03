@@ -29,6 +29,7 @@ defmodule AtomVmFirmwareEsp32.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      ## TO_DO: remove once it is merged
       {:exatomvm, path: "/home/pxp9/Programming/elixir/exatomvm", runtime: false},
       {:atomvm_packbeam, "~> 0.7.5", runtime: false},
       {:req, "~> 0.5.0", runtime: false},
