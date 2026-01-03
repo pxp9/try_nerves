@@ -12,7 +12,7 @@ defmodule AtomVmFirmware do
   @compile {:no_warn_undefined, [:network, :socket, GPIO]}
   @port 8080
   # Nerves device UDP server configuration
-  @nerves_ip {0, 0, 0, 0}
+  @nerves_ip {10, 128, 88, 168}
   @nerves_port 8080
   # RGB LED GPIO pins (GP22=Red, GP21=Green, GP20=Blue)
   @pin_red 22
@@ -34,8 +34,8 @@ defmodule AtomVmFirmware do
 
     config = [
       sta: [
-        ssid: "",
-        psk: "",
+        ssid: "Yolo-Guest",
+        psk: "FunFastFair",
         connected: &connected/0,
         got_ip: &got_ip/1,
         disconnected: &disconnected/0

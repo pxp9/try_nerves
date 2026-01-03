@@ -1,0 +1,32 @@
+# The directory Mix will write compiled artifacts to.
+/_build/
+
+# If you run "mix test --cover", coverage assets end up here.
+/cover/
+
+# The directory Mix downloads your dependencies sources to.
+/deps/
+
+# Where third-party dependencies are built
+/_checkouts/
+
+# AtomVM specific
+*.avm
+*.beam
+*.uf2
+/avm_deps/
+/priv.avm
+/deps.avm
+
+# Ignore package tarball (built via "mix hex.build").
+atom_vm_firmware_esp32-*.tar
+
+# Temporary files, for example, from tests.
+/tmp/
+
+# Editor/IDE files
+.elixir_ls/
+.vscode/
+*.swp
+*.swo
+*~

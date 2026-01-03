@@ -28,3 +28,6 @@ erl_crash.dump
 # Nix shell library symlinks
 .nix-shell-libs/
 .nix-shell-riscv-toolchain/
+
+# ESP-IDF local installation
+.esp/

@@ -52,8 +52,14 @@
                 fwup
                 libmnl
                 git
+                # Erlang 28 + Elixir 1.19
+                # beamMinimal28Packages.erlang
+                # beamMinimal28Packages.elixir_1_19
+                # beamMinimal28Packages.rebar3
+
+                # Erlang 27 (commented out - uncomment to switch)
                 beamMinimal27Packages.erlang
-                beamMinimal27Packages.elixir
+                beamMinimal27Packages.elixir_1_18
                 beamMinimal27Packages.rebar3
                 squashfsTools
                 x11_ssh_askpass
@@ -77,7 +83,19 @@
                 ninja
                 doxygen
                 python3
+                python3.pkgs.pip
+                python3.pkgs.virtualenv
                 gperf
+
+                ## ESP-IDF dependencies
+                wget
+                flex
+                bison
+                ccache
+                libffi
+                openssl
+                dfu-util
+                libusb1
               ]
               ++ [
                 pkgs-stable.cmake
@@ -98,6 +116,9 @@
                 pkgs.lib.makeLibraryPath [
                   pkgs.zlib
                   pkgs.mbedtls_2
+                  pkgs.libusb1
+                  pkgs.libffi
+                  pkgs.openssl
                 ]
               }:$LD_LIBRARY_PATH"
 
@@ -107,6 +128,26 @@
               if [ -d "$RISCV_TOOLCHAIN" ]; then
                 export PATH="$RISCV_TOOLCHAIN:$PATH"
                 # export PICO_TOOLCHAIN_PATH="$RISCV_TOOLCHAIN"
+              fi
+
+              # ESP-IDF setup
+              export ESP_DIR="$PWD/.esp"
+              export IDF_PATH="$ESP_DIR/esp-idf"
+
+              # Clone and setup ESP-IDF if not already present
+              if [ ! -d "$IDF_PATH" ]; then
+                echo "Setting up ESP-IDF v5.4.1..."
+                mkdir -p "$ESP_DIR"
+                git clone --single-branch --branch v5.4.1 --recursive https://github.com/espressif/esp-idf.git "$IDF_PATH"
+                cd "$IDF_PATH"
+                ./install.sh esp32,esp32s2,esp32s3,esp32c2,esp32c3,esp32c6,esp32h2,esp32p4
+                cd - > /dev/null
+              fi
+
+              # Source ESP-IDF export script to set up environment
+              if [ -f "$IDF_PATH/export.sh" ]; then
+                source "$IDF_PATH/export.sh" > /dev/null 2>&1
+                echo "ESP-IDF environment activated"
               fi
             '';
           };
